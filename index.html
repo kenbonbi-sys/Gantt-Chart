@@ -3,132 +3,225 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gantt Chart - Project Schedule</title>
+  <title>MoMo BUILD Program 2026 - Master Schedule</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    .scrollbar-thin::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    .scrollbar-thin::-webkit-scrollbar-track {
-      background: #f1f1f1;
-      border-radius: 3px;
-    }
-    .scrollbar-thin::-webkit-scrollbar-thumb {
-      background: #c1c1c1;
-      border-radius: 3px;
-    }
-    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-      background: #a1a1a1;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .task-bar { transition: all 0.2s ease; }
+    .task-bar:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
   </style>
 </head>
-<body>
+<body class="bg-slate-50">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useMemo, useRef, useEffect } = React;
 
-    // Icon Components using Lucide
-    const Icon = ({ name, className }) => {
-      const ref = useRef(null);
-      useEffect(() => {
-        if (ref.current) {
-          ref.current.innerHTML = '';
-          lucide.createElement(lucide.icons[name]).forEach(child => {
-            ref.current.appendChild(child.cloneNode(true));
-          });
-        }
-      }, [name]);
-      return <span ref={ref} className={className} style={{display: 'inline-flex', alignItems: 'center'}}></span>;
+    // Icons
+    const CalendarIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+    const PlusIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+    const Edit2Icon = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>;
+    const Trash2Icon = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>;
+    const XIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+    const SaveIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+    const FilterIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>;
+    const DownloadIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
+
+    // Utility Functions
+    const formatDate = (date) => new Date(date).toISOString().split('T')[0];
+    const getDaysDiff = (start, end) => Math.round((new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24));
+    const getMonthName = (dateString) => new Date(dateString).toLocaleString('default', { month: 'short', year: 'numeric' });
+    const getWeekNumber = (dateString) => {
+      const d = new Date(dateString);
+      const startOfYear = new Date(d.getFullYear(), 0, 1);
+      return Math.ceil((((d - startOfYear) / 86400000) + startOfYear.getDay() + 1) / 7);
     };
 
-    // Simple Icon components
-    const CalendarIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
-    const PlusIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
-    const Edit2Icon = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>;
-    const Trash2Icon = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
-    const XIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-    const SaveIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
-
-    /**
-     * UTILITY FUNCTIONS
-     */
-    const formatDate = (date) => {
-      return new Date(date).toISOString().split('T')[0];
-    };
-
-    const getDaysDiff = (start, end) => {
-      const s = new Date(start);
-      const e = new Date(end);
-      return Math.round((e - s) / (1000 * 60 * 60 * 24));
-    };
-
-    const getMonthName = (dateString) => {
-      return new Date(dateString).toLocaleString('default', { month: 'long', year: 'numeric' });
-    };
-
-    // Initial Mock Data
+    // MoMo BUILD Program Data
     const INITIAL_TASKS = [
-      { id: 1, name: 'Project Kickoff', start: '2024-01-01', end: '2024-01-03', category: 'Planning', status: 'Completed', progress: 100 },
-      { id: 2, name: 'Requirements Gathering', start: '2024-01-04', end: '2024-01-14', category: 'Planning', status: 'Completed', progress: 100 },
-      { id: 3, name: 'UI/UX Design Phase', start: '2024-01-15', end: '2024-01-28', category: 'Design', status: 'In Progress', progress: 60 },
-      { id: 4, name: 'Frontend Architecture', start: '2024-01-20', end: '2024-02-05', category: 'Development', status: 'In Progress', progress: 40 },
-      { id: 5, name: 'Backend API Setup', start: '2024-01-25', end: '2024-02-10', category: 'Development', status: 'Pending', progress: 0 },
-      { id: 6, name: 'Database Schema', start: '2024-01-22', end: '2024-01-30', category: 'Development', status: 'Completed', progress: 100 },
-      { id: 7, name: 'Integration Testing', start: '2024-02-11', end: '2024-02-20', category: 'Testing', status: 'Pending', progress: 0 },
-      { id: 8, name: 'Final Review', start: '2024-02-21', end: '2024-02-25', category: 'Deployment', status: 'Pending', progress: 0 },
+      // Phase 1 - Talent Magnet
+      // December 2025 – Strategy & Foundation
+      { id: 1, name: 'Program positioning', start: '2025-12-01', end: '2025-12-07', phase: 'Phase 1 - Talent Magnet', category: 'Strategy & Foundation', owner: 'EB', status: 'Pending', milestone: 'EVP draft shared', deliverable: 'Draft BUILD EVP, narrative, target profile' },
+      { id: 2, name: 'Alignment & refinement', start: '2025-12-08', end: '2025-12-14', phase: 'Phase 1 - Talent Magnet', category: 'Strategy & Foundation', owner: 'EB', status: 'Pending', milestone: 'Alignment gaps closed', deliverable: 'EVP refined with TA & PMO' },
+      { id: 3, name: 'Decision', start: '2025-12-15', end: '2025-12-21', phase: 'Phase 1 - Talent Magnet', category: 'Strategy & Foundation', owner: 'EB', status: 'Pending', milestone: 'EVP signed off', deliverable: 'EVP aligned & approved' },
+      { id: 4, name: 'Planning', start: '2025-12-22', end: '2025-12-31', phase: 'Phase 1 - Talent Magnet', category: 'Strategy & Foundation', owner: 'TA', status: 'Pending', milestone: 'Strategy endorsed', deliverable: 'Talent Magnet strategy approved (channels, pools, timeline)' },
+      
+      // January 2026 – Go-Live Preparation & Launch
+      { id: 5, name: 'Asset production', start: '2026-01-02', end: '2026-01-07', phase: 'Phase 1 - Talent Magnet', category: 'Go-Live Preparation & Launch', owner: 'EB', status: 'Pending', milestone: 'Content in progress', deliverable: 'BUILD deck, JD drafts, landing page' },
+      { id: 6, name: 'Asset finalization', start: '2026-01-08', end: '2026-01-14', phase: 'Phase 1 - Talent Magnet', category: 'Go-Live Preparation & Launch', owner: 'EB', status: 'Pending', milestone: 'Assets published', deliverable: 'Branding & marketing assets live' },
+      { id: 7, name: 'Market entry', start: '2026-01-15', end: '2026-01-21', phase: 'Phase 1 - Talent Magnet', category: 'Go-Live Preparation & Launch', owner: 'TA', status: 'Pending', milestone: 'Pipeline opened', deliverable: 'Sourcing launch (active outreach)' },
+      { id: 8, name: 'Selection readiness', start: '2026-01-22', end: '2026-01-31', phase: 'Phase 1 - Talent Magnet', category: 'Go-Live Preparation & Launch', owner: 'TA', status: 'Pending', milestone: 'Tools & rubrics approved', deliverable: 'Assessment framework finalized' },
+      
+      // February 2026 – Assessment & Interviews
+      { id: 9, name: 'Interview prep', start: '2026-02-01', end: '2026-02-07', phase: 'Phase 1 - Talent Magnet', category: 'Assessment & Interviews', owner: 'TA', status: 'Pending', milestone: 'Panel materials ready', deliverable: 'Interview guides, scoring alignment' },
+      { id: 10, name: 'Capability readiness', start: '2026-02-08', end: '2026-02-14', phase: 'Phase 1 - Talent Magnet', category: 'Assessment & Interviews', owner: 'TA', status: 'Pending', milestone: 'Panels trained', deliverable: 'Interview panel readiness (calibration)' },
+      { id: 11, name: 'Candidate evaluation', start: '2026-02-15', end: '2026-02-21', phase: 'Phase 1 - Talent Magnet', category: 'Assessment & Interviews', owner: 'TA', status: 'Pending', milestone: 'Pipeline quality check', deliverable: 'Assessments & interviews ongoing' },
+      { id: 12, name: 'Funnel tightening', start: '2026-02-22', end: '2026-02-28', phase: 'Phase 1 - Talent Magnet', category: 'Assessment & Interviews', owner: 'TA', status: 'Pending', milestone: '≥60% quality pass rate', deliverable: 'Early shortlists per role' },
+      
+      // March 2026 – Shortlist & Offers
+      { id: 13, name: 'Decision shaping', start: '2026-03-01', end: '2026-03-07', phase: 'Phase 1 - Talent Magnet', category: 'Shortlist & Offers', owner: 'TA', status: 'Pending', milestone: 'Quality validated', deliverable: 'Shortlist finalized (per role)' },
+      { id: 14, name: 'Reward alignment', start: '2026-03-08', end: '2026-03-14', phase: 'Phase 1 - Talent Magnet', category: 'Shortlist & Offers', owner: 'TR & TA', status: 'Pending', milestone: 'CFO/CHRO alignment', deliverable: 'Offer package aligned' },
+      { id: 15, name: 'Execution', start: '2026-03-15', end: '2026-03-21', phase: 'Phase 1 - Talent Magnet', category: 'Shortlist & Offers', owner: 'TA', status: 'Pending', milestone: 'Offers sent', deliverable: 'Offers issued' },
+      { id: 16, name: 'Conversion', start: '2026-03-22', end: '2026-03-31', phase: 'Phase 1 - Talent Magnet', category: 'Shortlist & Offers', owner: 'TA', status: 'Pending', milestone: 'Acceptance risk tracked', deliverable: 'Offer follow-up & negotiations' },
+      
+      // April 2026 – Acceptance & Phase Closure
+      { id: 17, name: 'Conversion', start: '2026-04-01', end: '2026-04-07', phase: 'Phase 1 - Talent Magnet', category: 'Acceptance & Phase Closure', owner: 'TA', status: 'Pending', milestone: '≥90% acceptance', deliverable: 'Offers accepted (signed)' },
+      { id: 18, name: 'Closure', start: '2026-04-08', end: '2026-04-14', phase: 'Phase 1 - Talent Magnet', category: 'Acceptance & Phase Closure', owner: 'ODTM PM', status: 'Pending', milestone: 'Cohort locked', deliverable: 'Final cohort confirmation' },
+      { id: 19, name: 'Transition', start: '2026-04-15', end: '2026-04-21', phase: 'Phase 1 - Talent Magnet', category: 'Acceptance & Phase Closure', owner: 'ODTM PM', status: 'Pending', milestone: 'Lessons captured', deliverable: 'Phase 1 close-out report' },
+      { id: 20, name: 'Handover', start: '2026-04-22', end: '2026-04-30', phase: 'Phase 1 - Talent Magnet', category: 'Acceptance & Phase Closure', owner: 'ODTM PM', status: 'Pending', milestone: 'Phase exit approved', deliverable: 'Readiness for Phase 2 onboarding' },
+      
+      // Planning & Design (Tet Holiday: Feb 14-22, 2026)
+      { id: 21, name: 'Phase kickoff', start: '2026-02-01', end: '2026-02-07', phase: 'Phase 2 - Leadership Development', category: 'Planning & Design', owner: 'L&D', status: 'Pending', milestone: 'Kickoff completed', deliverable: 'Phase 2 kickoff & scope alignment' },
+      { id: 22, name: 'Experience design', start: '2026-02-08', end: '2026-02-13', phase: 'Phase 2 - Leadership Development', category: 'Planning & Design', owner: 'L&D', status: 'Pending', milestone: 'Draft agenda ready', deliverable: 'Draft Phase 2 agenda & success metrics' },
+      { id: 23, name: 'Tet Holiday', start: '2026-02-14', end: '2026-02-22', phase: 'Phase 2 - Leadership Development', category: 'Planning & Design', owner: '—', status: 'Pending', milestone: '—', deliverable: 'No formal program activities' },
+      { id: 24, name: 'Post-Tet reset', start: '2026-02-23', end: '2026-02-28', phase: 'Phase 2 - Leadership Development', category: 'Planning & Design', owner: 'L&D', status: 'Pending', milestone: 'Design resumed', deliverable: 'Agenda review & refinement' },
+      
+      // Executive & BU Engagement Preparation
+      { id: 25, name: 'Executive mapping', start: '2026-03-01', end: '2026-03-07', phase: 'Phase 2 - Leadership Development', category: 'Executive & BU Engagement', owner: 'ODTM PM', status: 'Pending', milestone: 'Speaker map drafted', deliverable: 'Identify CEO / BOM / C-suite roles' },
+      { id: 26, name: 'Executive confirmation', start: '2026-03-08', end: '2026-03-14', phase: 'Phase 2 - Leadership Development', category: 'Executive & BU Engagement', owner: 'ODTM PM', status: 'Pending', milestone: 'Availability locked', deliverable: 'Executive engagement confirmed' },
+      { id: 27, name: 'BU immersion design', start: '2026-03-15', end: '2026-03-21', phase: 'Phase 2 - Leadership Development', category: 'Executive & BU Engagement', owner: 'LM & ODTM', status: 'Pending', milestone: 'BU flow designed', deliverable: 'BU immersion structure & learning objectives' },
+      { id: 28, name: 'Buddy onboarding design', start: '2026-03-22', end: '2026-03-31', phase: 'Phase 2 - Leadership Development', category: 'Executive & BU Engagement', owner: 'ODTM', status: 'Pending', milestone: 'Buddy model approved', deliverable: 'Buddy framework & expectations defined' },
+      
+      // Content Finalization & Launch Readiness
+      { id: 29, name: 'Content finalization', start: '2026-04-01', end: '2026-04-07', phase: 'Phase 2 - Leadership Development', category: 'Content Finalization & Launch', owner: 'L&D', status: 'Pending', milestone: 'Content locked', deliverable: 'Leadership Launch agenda & materials finalized' },
+      { id: 30, name: 'Pre-work preparation', start: '2026-04-08', end: '2026-04-14', phase: 'Phase 2 - Leadership Development', category: 'Content Finalization & Launch', owner: 'L&D', status: 'Pending', milestone: 'Pre-reads sent', deliverable: 'Pre-reads & MoMo strategy materials released' },
+      { id: 31, name: 'Logistics readiness', start: '2026-04-15', end: '2026-04-21', phase: 'Phase 2 - Leadership Development', category: 'Content Finalization & Launch', owner: 'L&D', status: 'Pending', milestone: 'Go-live ready', deliverable: 'Venues, systems, run-throughs completed' },
+      { id: 32, name: 'Final readiness', start: '2026-04-22', end: '2026-04-30', phase: 'Phase 2 - Leadership Development', category: 'Content Finalization & Launch', owner: 'L&D', status: 'Pending', milestone: 'Launch approved', deliverable: 'Full Phase 2 readiness sign-off' },
+      
+      // Onboarding & Leadership Launch
+      { id: 33, name: 'Onboarding & Leadership Launch', start: '2026-05-01', end: '2026-05-31', phase: 'Phase 2 - Leadership Development', category: 'Onboarding & Leadership Launch', owner: 'L&D', status: 'Pending', milestone: 'Attendance & engagement tracked', deliverable: 'MoMo strategy, culture, product & business model immersion' },
+      
+      // Rotation 1 Execution
+      { id: 34, name: 'Rotation 1 Execution', start: '2026-05-01', end: '2026-12-31', phase: 'Phase 2 - Leadership Development', category: 'Rotation 1', owner: 'Fellow / LM', status: 'Pending', milestone: 'Bi-Monthly check-ins', deliverable: 'Business diagnosis & delivery, product/CIO learning, digital marketing sessions' },
+      { id: 35, name: 'Checkpoint', start: '2026-07-01', end: '2026-07-31', phase: 'Phase 2 - Leadership Development', category: 'Rotation 1', owner: 'LM / L&OD', status: 'Pending', milestone: 'Mid-Year Review 2026', deliverable: 'Progress & leadership behavior review' },
+      { id: 36, name: 'Rotation 1 Closure', start: '2026-12-01', end: '2026-12-31', phase: 'Phase 2 - Leadership Development', category: 'Rotation 1', owner: 'LM / HRBP / L&OD', status: 'Pending', milestone: 'Year-End Review 2026', deliverable: 'Performance review completed, rotation rating confirmed' },
+      
+      // Rotation 2: Stretch & Ownership
+      { id: 37, name: 'Rotation 2 Goal Setting', start: '2027-01-01', end: '2027-01-31', phase: 'Phase 3 - Rotations', category: 'Rotation 2: Stretch & Ownership', owner: 'Fellow / LM', status: 'Pending', milestone: 'Goals locked, stretch assignment documented', deliverable: 'Larger scope, cross-functional leadership objectives defined' },
+      { id: 38, name: 'Rotation 2 Execution', start: '2027-01-01', end: '2027-06-30', phase: 'Phase 3 - Rotations', category: 'Rotation 2: Stretch & Ownership', owner: 'Fellow / LM', status: 'Pending', milestone: 'Monthly LM check-ins, Peer Learning Circle', deliverable: 'Stretch projects, cross-BU collaboration, delivery under pressure' },
+      { id: 39, name: 'Rotation 2 Closure', start: '2027-06-01', end: '2027-06-30', phase: 'Phase 3 - Rotations', category: 'Rotation 2: Stretch & Ownership', owner: 'LM / HRBP / L&OD', status: 'Pending', milestone: 'Mid-Year Review 2027 completed', deliverable: 'Progress & leadership review, performance feedback, decision quality & risk review' },
+      
+      // Rotation 3: Enterprise Impact
+      { id: 40, name: 'Rotation 3 Goal Setting', start: '2027-07-01', end: '2027-07-31', phase: 'Phase 3 - Rotations', category: 'Rotation 3: Enterprise Impact', owner: 'Fellow / LM', status: 'Pending', milestone: 'Rotation goals locked, stretch assignment documented', deliverable: 'Enterprise-level objectives, leadership stretch goals' },
+      { id: 41, name: 'Rotation 3 Execution', start: '2027-07-01', end: '2027-12-31', phase: 'Phase 3 - Rotations', category: 'Rotation 3: Enterprise Impact', owner: 'Fellow / LM', status: 'Pending', milestone: 'Monthly LM check-ins, Peer Learning Circle', deliverable: 'Enterprise projects, BU-level delivery, cross-functional leadership tested' },
+      { id: 42, name: 'Rotation 3 Closure', start: '2027-12-01', end: '2027-12-31', phase: 'Phase 3 - Rotations', category: 'Rotation 3: Enterprise Impact', owner: 'LM / HRBP / L&OD', status: 'Pending', milestone: 'Year-End Review 2027 completed', deliverable: 'Enterprise impact consolidation, readiness assessment vs BU Head criteria' },
+      
+      // Final Review, Graduation & Placement
+      { id: 43, name: 'Final Leadership Narrative & Placement', start: '2028-01-01', end: '2028-03-31', phase: 'Final Review & Graduation', category: 'Graduation & Placement', owner: 'Steering Committee / L&OD', status: 'Pending', milestone: 'Final readiness rating, graduation completed', deliverable: 'CEO & BOM presentation, graduation ceremony, career & placement conversation' },
     ];
 
-    const CATEGORIES = ['Planning', 'Design', 'Development', 'Testing', 'Deployment', 'Marketing'];
+    const PHASES = [
+      'Phase 1 - Talent Magnet',
+      'Phase 2 - Leadership Development', 
+      'Phase 3 - Rotations',
+      'Final Review & Graduation'
+    ];
+
+    const CATEGORIES = [
+      'Strategy & Foundation',
+      'Go-Live Preparation & Launch',
+      'Assessment & Interviews',
+      'Shortlist & Offers',
+      'Acceptance & Phase Closure',
+      'Planning & Design',
+      'Executive & BU Engagement',
+      'Content Finalization & Launch',
+      'Onboarding & Leadership Launch',
+      'Rotation 1',
+      'Rotation 2: Stretch & Ownership',
+      'Rotation 3: Enterprise Impact',
+      'Graduation & Placement'
+    ];
+
+    const OWNERS = ['EB', 'TA', 'TR & TA', 'ODTM PM', 'L&D', 'LM & ODTM', 'ODTM', 'Fellow / LM', 'LM / L&OD', 'LM / HRBP / L&OD', 'Steering Committee / L&OD', '—'];
     const STATUSES = ['Pending', 'In Progress', 'Completed', 'Delayed'];
 
-    const STATUS_COLORS = {
-      'Pending': 'bg-gray-300 text-gray-700 border-gray-400',
-      'In Progress': 'bg-blue-500 text-white border-blue-600',
-      'Completed': 'bg-emerald-500 text-white border-emerald-600',
-      'Delayed': 'bg-red-500 text-white border-red-600',
+    const PHASE_COLORS = {
+      'Phase 1 - Talent Magnet': { bg: 'bg-blue-500', light: 'bg-blue-50', border: 'border-blue-600', text: 'text-blue-700' },
+      'Phase 2 - Leadership Development': { bg: 'bg-emerald-500', light: 'bg-emerald-50', border: 'border-emerald-600', text: 'text-emerald-700' },
+      'Phase 3 - Rotations': { bg: 'bg-amber-500', light: 'bg-amber-50', border: 'border-amber-600', text: 'text-amber-700' },
+      'Final Review & Graduation': { bg: 'bg-purple-500', light: 'bg-purple-50', border: 'border-purple-600', text: 'text-purple-700' },
     };
 
-    const STATUS_BG_LIGHT = {
-      'Pending': 'bg-gray-100',
-      'In Progress': 'bg-blue-100',
-      'Completed': 'bg-emerald-100',
-      'Delayed': 'bg-red-100',
+    const STATUS_COLORS = {
+      'Pending': 'bg-slate-400',
+      'In Progress': 'bg-blue-500',
+      'Completed': 'bg-emerald-500',
+      'Delayed': 'bg-red-500',
     };
 
     function GanttChart() {
       const [tasks, setTasks] = useState(INITIAL_TASKS);
-      const [viewMode, setViewMode] = useState('Day');
+      const [viewMode, setViewMode] = useState('Month'); // 'Week' or 'Month'
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [editingTask, setEditingTask] = useState(null);
+      const [selectedPhase, setSelectedPhase] = useState('All');
+      const [hoveredTask, setHoveredTask] = useState(null);
       const timelineRef = useRef(null);
+      const headerRef = useRef(null);
 
-      const dates = useMemo(() => {
-        if (tasks.length === 0) return [];
+      // Filter tasks by phase
+      const filteredTasks = useMemo(() => {
+        if (selectedPhase === 'All') return tasks;
+        return tasks.filter(t => t.phase === selectedPhase);
+      }, [tasks, selectedPhase]);
 
-        const startDates = tasks.map(t => new Date(t.start).getTime());
-        const endDates = tasks.map(t => new Date(t.end).getTime());
-        let minDate = new Date(Math.min(...startDates));
-        let maxDate = new Date(Math.max(...endDates));
-
-        minDate.setDate(minDate.getDate() - 5);
-        maxDate.setDate(maxDate.getDate() + 15);
-
+      // Generate date range
+      const { dates, months } = useMemo(() => {
+        const startDate = new Date('2025-12-01');
+        const endDate = new Date('2028-04-30');
+        
         const dateArray = [];
-        const current = new Date(minDate);
-        while (current <= maxDate) {
-          dateArray.push(formatDate(current));
+        const monthsMap = {};
+        const current = new Date(startDate);
+        
+        while (current <= endDate) {
+          const dateStr = formatDate(current);
+          dateArray.push(dateStr);
+          
+          const monthKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
+          if (!monthsMap[monthKey]) {
+            monthsMap[monthKey] = {
+              name: current.toLocaleString('default', { month: 'short', year: 'numeric' }),
+              startIndex: dateArray.length - 1,
+              days: 0
+            };
+          }
+          monthsMap[monthKey].days++;
+          
           current.setDate(current.getDate() + 1);
         }
-        return dateArray;
-      }, [tasks]);
+        
+        return { dates: dateArray, months: Object.values(monthsMap) };
+      }, []);
 
-      const columnWidth = viewMode === 'Day' ? 50 : 30;
+      const columnWidth = viewMode === 'Week' ? 8 : 3;
+      const rowHeight = 36;
+
+      // Group tasks by phase and category
+      const groupedTasks = useMemo(() => {
+        const groups = {};
+        PHASES.forEach(phase => {
+          groups[phase] = {};
+          CATEGORIES.forEach(cat => groups[phase][cat] = []);
+        });
+        
+        filteredTasks.forEach(task => {
+          if (groups[task.phase] && groups[task.phase][task.category]) {
+            groups[task.phase][task.category].push(task);
+          }
+        });
+        
+        return groups;
+      }, [filteredTasks]);
 
       const handleDelete = (id) => {
         if (confirm('Are you sure you want to delete this task?')) {
@@ -146,224 +239,318 @@
         setEditingTask(null);
       };
 
-      const openNewTaskModal = () => {
-        setEditingTask(null);
-        setIsModalOpen(true);
-      };
-
       const openEditTaskModal = (task) => {
         setEditingTask(task);
         setIsModalOpen(true);
       };
 
-      const groupedTasks = useMemo(() => {
-        const groups = {};
-        CATEGORIES.forEach(cat => groups[cat] = []);
-        tasks.forEach(task => {
-          if (!groups[task.category]) groups[task.category] = [];
-          groups[task.category].push(task);
+      const syncScroll = (e) => {
+        if (headerRef.current) {
+          headerRef.current.scrollLeft = e.target.scrollLeft;
+        }
+      };
+
+      // Calculate total rows for proper height
+      let totalRows = 0;
+      Object.entries(groupedTasks).forEach(([phase, categories]) => {
+        let phaseHasContent = false;
+        Object.entries(categories).forEach(([cat, catTasks]) => {
+          if (catTasks.length > 0) {
+            phaseHasContent = true;
+            totalRows += 1; // category header
+            totalRows += catTasks.length;
+          }
         });
-        return groups;
-      }, [tasks]);
+        if (phaseHasContent) totalRows += 1; // phase header
+      });
 
       return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 p-4 md:p-6 lg:p-8">
+        <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50 p-4 md:p-6">
           {/* Header */}
-          <div className="bg-white rounded-xl shadow-lg p-4 md:p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
-                <CalendarIcon />
+          <div className="bg-white rounded-2xl shadow-xl p-5 mb-5 border border-slate-200">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl text-white shadow-lg">
+                  <CalendarIcon />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-800">MoMo BUILD Program 2026</h1>
+                  <p className="text-slate-500 text-sm">Leadership Development Master Schedule • Dec 2025 - Mar 2028</p>
+                </div>
               </div>
-              <h1 className="text-xl md:text-2xl font-bold text-gray-800">Project Master Schedule</h1>
+
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Phase Filter */}
+                <div className="flex items-center gap-2">
+                  <FilterIcon />
+                  <select
+                    value={selectedPhase}
+                    onChange={(e) => setSelectedPhase(e.target.value)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  >
+                    <option value="All">All Phases</option>
+                    {PHASES.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+
+                {/* View Mode */}
+                <div className="flex bg-slate-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setViewMode('Week')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      viewMode === 'Week' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Week
+                  </button>
+                  <button
+                    onClick={() => setViewMode('Month')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      viewMode === 'Month' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Month
+                  </button>
+                </div>
+
+                {/* Add Task Button */}
+                <button
+                  onClick={() => { setEditingTask(null); setIsModalOpen(true); }}
+                  className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-all shadow-md hover:shadow-lg"
+                >
+                  <PlusIcon />
+                  Add Task
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode('Day')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                    viewMode === 'Day' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Days
-                </button>
-                <button
-                  onClick={() => setViewMode('Week')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                    viewMode === 'Week' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Weeks
-                </button>
-              </div>
-
-              <button
-                onClick={openNewTaskModal}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
-              >
-                <PlusIcon />
-                Add Task
-              </button>
+            {/* Phase Legend */}
+            <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-slate-100">
+              {PHASES.map(phase => (
+                <div key={phase} className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${PHASE_COLORS[phase].bg}`}></div>
+                  <span className="text-xs text-slate-600">{phase}</span>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Main Content Area */}
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden flex" style={{maxHeight: 'calc(100vh - 180px)'}}>
-            {/* Sidebar */}
-            <div className="w-64 md:w-72 lg:w-80 flex-shrink-0 border-r border-gray-200 bg-gray-50">
-              <div className="h-16 px-4 flex items-center border-b border-gray-200 bg-white sticky top-0 z-10">
-                <span className="font-semibold text-gray-700">Task Name</span>
-              </div>
-              <div className="overflow-y-auto" style={{maxHeight: 'calc(100vh - 260px)'}}>
-                {Object.entries(groupedTasks).map(([category, categoryTasks]) => (
-                  categoryTasks.length > 0 && (
-                    <div key={category}>
-                      <div className="px-4 py-2 bg-gray-100 font-semibold text-xs uppercase text-gray-500 tracking-wider sticky top-0 z-5">
-                        {category}
-                      </div>
-                      {categoryTasks.map(task => (
-                        <div
-                          key={task.id}
-                          className={`h-12 px-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-100 transition-colors cursor-pointer group ${STATUS_BG_LIGHT[task.status]}`}
-                        >
-                          <span className="text-sm text-gray-800 truncate flex-1 pr-2">{task.name}</span>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => openEditTaskModal(task)}
-                              className="p-1 hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 rounded"
-                            >
-                              <Edit2Icon />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(task.id)}
-                              className="p-1 hover:bg-red-100 text-gray-400 hover:text-red-600 rounded"
-                            >
-                              <Trash2Icon />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                ))}
-              </div>
-            </div>
-
-            {/* Timeline Area */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {/* Timeline Header */}
-              <div
-                className="h-16 border-b border-gray-200 overflow-x-auto scrollbar-thin"
-                onScroll={(e) => { if (timelineRef.current) timelineRef.current.scrollLeft = e.target.scrollLeft }}
-              >
-                <div className="flex h-full" style={{ width: dates.length * columnWidth }}>
-                  {dates.map((date, index) => {
-                    const d = new Date(date);
-                    const isMonthStart = d.getDate() === 1 || index === 0;
-                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-
+          {/* Main Gantt Area */}
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200" style={{maxHeight: 'calc(100vh - 220px)'}}>
+            <div className="flex">
+              {/* Left Sidebar - Task Names */}
+              <div className="w-72 lg:w-80 flex-shrink-0 border-r border-slate-200 bg-slate-50">
+                <div className="h-14 px-4 flex items-center border-b border-slate-200 bg-white sticky top-0 z-20">
+                  <span className="font-semibold text-slate-700">Task / Activity</span>
+                </div>
+                <div className="overflow-y-auto scrollbar-thin" style={{maxHeight: 'calc(100vh - 290px)'}}>
+                  {Object.entries(groupedTasks).map(([phase, categories]) => {
+                    const phaseHasContent = Object.values(categories).some(arr => arr.length > 0);
+                    if (!phaseHasContent) return null;
+                    
                     return (
-                      <div
-                        key={date}
-                        className={`flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-100 text-xs ${
-                          isWeekend ? 'bg-gray-50' : 'bg-white'
-                        }`}
-                        style={{ width: columnWidth }}
-                      >
-                        {isMonthStart && (
-                          <span className="text-indigo-600 font-semibold text-[10px] absolute top-1">{getMonthName(date)}</span>
-                        )}
-                        <span className={`font-bold ${isWeekend ? 'text-gray-400' : 'text-gray-700'}`}>{d.getDate()}</span>
-                        <span className={`text-[10px] ${isWeekend ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {d.toLocaleDateString('en-US', { weekday: 'narrow' })}
-                        </span>
+                      <div key={phase}>
+                        {/* Phase Header */}
+                        <div className={`px-4 py-2 font-bold text-sm ${PHASE_COLORS[phase].light} ${PHASE_COLORS[phase].text} border-b border-slate-200 sticky top-0 z-10`}>
+                          {phase}
+                        </div>
+                        
+                        {Object.entries(categories).map(([category, categoryTasks]) => (
+                          categoryTasks.length > 0 && (
+                            <div key={category}>
+                              {/* Category Header */}
+                              <div className="px-4 py-1.5 bg-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                                {category}
+                              </div>
+                              
+                              {/* Tasks */}
+                              {categoryTasks.map(task => (
+                                <div
+                                  key={task.id}
+                                  className="h-9 px-4 flex items-center justify-between border-b border-slate-100 hover:bg-blue-50 transition-colors cursor-pointer group"
+                                  onMouseEnter={() => setHoveredTask(task.id)}
+                                  onMouseLeave={() => setHoveredTask(null)}
+                                  onClick={() => openEditTaskModal(task)}
+                                >
+                                  <span className="text-sm text-slate-700 truncate flex-1 pr-2">{task.name}</span>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); openEditTaskModal(task); }}
+                                      className="p-1 hover:bg-blue-100 text-slate-400 hover:text-blue-600 rounded"
+                                    >
+                                      <Edit2Icon />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}
+                                      className="p-1 hover:bg-red-100 text-slate-400 hover:text-red-600 rounded"
+                                    >
+                                      <Trash2Icon />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        ))}
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Timeline Body */}
-              <div
-                ref={timelineRef}
-                className="flex-1 overflow-auto scrollbar-thin"
-                onScroll={(e) => {
-                  const header = e.target.previousSibling;
-                  if(header) header.scrollLeft = e.target.scrollLeft;
-                }}
-              >
-                <div className="relative" style={{ width: dates.length * columnWidth, minHeight: '100%' }}>
-                  {/* Grid Lines */}
-                  <div className="absolute inset-0 flex pointer-events-none">
-                    {dates.map((date) => {
-                      const d = new Date(date);
-                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+              {/* Right Side - Timeline */}
+              <div className="flex-1 overflow-hidden flex flex-col">
+                {/* Timeline Header - Months */}
+                <div
+                  ref={headerRef}
+                  className="h-14 border-b border-slate-200 overflow-x-auto scrollbar-thin bg-white"
+                  style={{scrollbarWidth: 'none'}}
+                >
+                  <div className="flex h-full" style={{ width: dates.length * columnWidth }}>
+                    {months.map((month, idx) => (
+                      <div
+                        key={idx}
+                        className="flex-shrink-0 flex items-center justify-center border-r border-slate-200 text-xs font-semibold text-slate-600 bg-slate-50"
+                        style={{ width: month.days * columnWidth }}
+                      >
+                        {month.name}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Timeline Body */}
+                <div
+                  ref={timelineRef}
+                  className="flex-1 overflow-auto scrollbar-thin"
+                  onScroll={syncScroll}
+                  style={{maxHeight: 'calc(100vh - 304px)'}}
+                >
+                  <div className="relative" style={{ width: dates.length * columnWidth, minHeight: totalRows * rowHeight }}>
+                    {/* Grid - Month separators */}
+                    <div className="absolute inset-0 pointer-events-none">
+                      {months.map((month, idx) => {
+                        const left = months.slice(0, idx).reduce((sum, m) => sum + m.days * columnWidth, 0);
+                        return (
+                          <div
+                            key={idx}
+                            className="absolute top-0 bottom-0 border-r border-slate-200"
+                            style={{ left: left + month.days * columnWidth - 1 }}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    {/* Today line */}
+                    {(() => {
+                      const today = formatDate(new Date());
+                      const todayIndex = dates.indexOf(today);
+                      if (todayIndex === -1) return null;
                       return (
                         <div
-                          key={date}
-                          className={`flex-shrink-0 h-full border-r ${isWeekend ? 'bg-gray-50/50 border-gray-200' : 'border-gray-100'}`}
-                          style={{ width: columnWidth }}
-                        />
+                          className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+                          style={{ left: todayIndex * columnWidth }}
+                        >
+                          <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full"></div>
+                        </div>
                       );
-                    })}
-                  </div>
+                    })()}
 
-                  {/* Task Rows */}
-                  <div className="relative">
-                    {Object.entries(groupedTasks).map(([category, categoryTasks]) => (
-                      categoryTasks.length > 0 && (
-                        <div key={category}>
-                          <div className="h-7"></div>
-                          {categoryTasks.map(task => {
-                            const startDateIndex = dates.indexOf(task.start);
-                            const duration = getDaysDiff(task.start, task.end) + 1;
-
-                            if (startDateIndex === -1 && dates.indexOf(task.end) === -1) return <div key={task.id} className="h-12"></div>;
-
-                            let left = startDateIndex * columnWidth;
-                            let width = duration * columnWidth;
-
-                            if (startDateIndex === -1) {
-                              const daysBefore = getDaysDiff(task.start, dates[0]);
-                              width -= daysBefore * columnWidth;
-                              left = 0;
-                            }
-
-                            return (
-                              <div key={task.id} className="h-12 relative flex items-center px-1">
-                                <div
-                                  className={`absolute h-8 rounded-md shadow-sm border cursor-pointer transition-all hover:shadow-md hover:scale-[1.02] ${STATUS_COLORS[task.status]}`}
-                                  style={{
-                                    left: left + 4,
-                                    width: Math.max(width - 8, 20),
-                                  }}
-                                  onClick={() => openEditTaskModal(task)}
-                                >
-                                  <div className="px-2 py-1 text-xs font-medium truncate h-full flex items-center">
-                                    {task.name}
+                    {/* Task Bars */}
+                    <div className="relative">
+                      {(() => {
+                        let rowIndex = 0;
+                        const elements = [];
+                        
+                        Object.entries(groupedTasks).forEach(([phase, categories]) => {
+                          const phaseHasContent = Object.values(categories).some(arr => arr.length > 0);
+                          if (!phaseHasContent) return;
+                          
+                          // Phase header row
+                          elements.push(
+                            <div key={`phase-${phase}`} className={`h-9 ${PHASE_COLORS[phase].light}`} style={{ position: 'relative' }}></div>
+                          );
+                          rowIndex++;
+                          
+                          Object.entries(categories).forEach(([category, categoryTasks]) => {
+                            if (categoryTasks.length === 0) return;
+                            
+                            // Category header row
+                            elements.push(
+                              <div key={`cat-${phase}-${category}`} className="h-6 bg-slate-50"></div>
+                            );
+                            rowIndex++;
+                            
+                            // Task rows
+                            categoryTasks.forEach(task => {
+                              const startIdx = dates.indexOf(task.start);
+                              const endIdx = dates.indexOf(task.end);
+                              
+                              if (startIdx === -1 || endIdx === -1) {
+                                elements.push(<div key={task.id} className="h-9"></div>);
+                                rowIndex++;
+                                return;
+                              }
+                              
+                              const left = startIdx * columnWidth;
+                              const width = (endIdx - startIdx + 1) * columnWidth;
+                              const colors = PHASE_COLORS[task.phase];
+                              
+                              elements.push(
+                                <div key={task.id} className="h-9 relative flex items-center">
+                                  <div
+                                    className={`task-bar absolute h-6 rounded-md shadow-sm cursor-pointer ${colors.bg} text-white border ${colors.border} ${hoveredTask === task.id ? 'ring-2 ring-offset-1 ring-blue-400' : ''}`}
+                                    style={{
+                                      left: left + 2,
+                                      width: Math.max(width - 4, 20),
+                                    }}
+                                    onClick={() => openEditTaskModal(task)}
+                                    title={`${task.name}\n${task.start} → ${task.end}\nOwner: ${task.owner}\nMilestone: ${task.milestone}`}
+                                  >
+                                    <div className="px-2 text-[10px] font-medium truncate h-full flex items-center">
+                                      {width > 80 ? task.name : ''}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )
-                    ))}
+                              );
+                              rowIndex++;
+                            });
+                          });
+                        });
+                        
+                        return elements;
+                      })()}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
+          {/* Stats Footer */}
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {PHASES.map(phase => {
+              const phaseTasks = tasks.filter(t => t.phase === phase);
+              const completed = phaseTasks.filter(t => t.status === 'Completed').length;
+              return (
+                <div key={phase} className={`${PHASE_COLORS[phase].light} rounded-xl p-4 border ${PHASE_COLORS[phase].border.replace('border-', 'border-')}/30`}>
+                  <div className={`text-xs font-semibold ${PHASE_COLORS[phase].text} uppercase tracking-wide`}>{phase.replace('Phase ', 'P').split(' - ')[0]}</div>
+                  <div className="text-2xl font-bold text-slate-800 mt-1">{phaseTasks.length}</div>
+                  <div className="text-xs text-slate-500">tasks • {completed} completed</div>
+                </div>
+              );
+            })}
+          </div>
+
           {/* Modal */}
           {isModalOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-                <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                  <h2 className="text-lg font-bold text-gray-800">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between p-5 border-b border-slate-200 sticky top-0 bg-white rounded-t-2xl">
+                  <h2 className="text-lg font-bold text-slate-800">
                     {editingTask ? 'Edit Task' : 'New Task'}
                   </h2>
-                  <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-lg">
                     <XIcon />
                   </button>
                 </div>
@@ -374,67 +561,93 @@
                     const formData = new FormData(e.target);
                     handleSaveTask({
                       name: formData.get('name'),
+                      phase: formData.get('phase'),
                       category: formData.get('category'),
                       start: formData.get('start'),
                       end: formData.get('end'),
+                      owner: formData.get('owner'),
                       status: formData.get('status'),
-                      progress: Number(formData.get('progress'))
+                      milestone: formData.get('milestone'),
+                      deliverable: formData.get('deliverable'),
                     });
                   }}
                 >
-                  <div className="p-4 space-y-4">
+                  <div className="p-5 space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Task Name</label>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Task Name *</label>
                       <input
                         type="text"
                         name="name"
                         required
                         defaultValue={editingTask?.name || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="Enter task name"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Phase *</label>
+                        <select
+                          name="phase"
+                          defaultValue={editingTask?.phase || PHASES[0]}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          {PHASES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Category *</label>
+                        <select
+                          name="category"
+                          defaultValue={editingTask?.category || CATEGORIES[0]}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Start Date *</label>
                         <input
                           type="date"
                           name="start"
                           required
-                          defaultValue={editingTask?.start || formatDate(new Date())}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          defaultValue={editingTask?.start || '2025-12-01'}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">End Date *</label>
                         <input
                           type="date"
                           name="end"
                           required
-                          defaultValue={editingTask?.end || formatDate(new Date())}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          defaultValue={editingTask?.end || '2025-12-07'}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Primary Owner</label>
                         <select
-                          name="category"
-                          defaultValue={editingTask?.category || CATEGORIES[0]}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          name="owner"
+                          defaultValue={editingTask?.owner || OWNERS[0]}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
-                          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          {OWNERS.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
                         <select
                           name="status"
                           defaultValue={editingTask?.status || STATUSES[0]}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
                           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
@@ -442,34 +655,39 @@
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Progress (%)</label>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">PMO Checkpoint / Milestone</label>
                       <input
-                        type="range"
-                        name="progress"
-                        min="0"
-                        max="100"
-                        defaultValue={editingTask?.progress || 0}
-                        className="w-full accent-indigo-600"
+                        type="text"
+                        name="milestone"
+                        defaultValue={editingTask?.milestone || ''}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., EVP draft shared"
                       />
-                      <div className="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>0%</span>
-                        <span>50%</span>
-                        <span>100%</span>
-                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Deliverables</label>
+                      <textarea
+                        name="deliverable"
+                        rows="2"
+                        defaultValue={editingTask?.deliverable || ''}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Key deliverables for this task..."
+                      />
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                  <div className="flex justify-end gap-3 p-5 border-t border-slate-200 bg-slate-50 rounded-b-2xl">
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+                      className="px-4 py-2 text-slate-700 hover:bg-slate-100 rounded-lg font-medium transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+                      className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-lg font-medium transition-all shadow-md"
                     >
                       <SaveIcon />
                       Save Task
