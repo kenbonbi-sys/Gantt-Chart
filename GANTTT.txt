@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gantt Chart - Project Schedule</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 3px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 3px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+      background: #a1a1a1;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useRef, useEffect } = React;
+
+    // Icon Components using Lucide
+    const Icon = ({ name, className }) => {
+      const ref = useRef(null);
+      useEffect(() => {
+        if (ref.current) {
+          ref.current.innerHTML = '';
+          lucide.createElement(lucide.icons[name]).forEach(child => {
+            ref.current.appendChild(child.cloneNode(true));
+          });
+        }
+      }, [name]);
+      return <span ref={ref} className={className} style={{display: 'inline-flex', alignItems: 'center'}}></span>;
+    };
+
+    // Simple Icon components
+    const CalendarIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+    const PlusIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+    const Edit2Icon = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>;
+    const Trash2Icon = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
+    const XIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+    const SaveIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+
+    /**
+     * UTILITY FUNCTIONS
+     */
+    const formatDate = (date) => {
+      return new Date(date).toISOString().split('T')[0];
+    };
+
+    const getDaysDiff = (start, end) => {
+      const s = new Date(start);
+      const e = new Date(end);
+      return Math.round((e - s) / (1000 * 60 * 60 * 24));
+    };
+
+    const getMonthName = (dateString) => {
+      return new Date(dateString).toLocaleString('default', { month: 'long', year: 'numeric' });
+    };
+
+    // Initial Mock Data
+    const INITIAL_TASKS = [
+      { id: 1, name: 'Project Kickoff', start: '2024-01-01', end: '2024-01-03', category: 'Planning', status: 'Completed', progress: 100 },
+      { id: 2, name: 'Requirements Gathering', start: '2024-01-04', end: '2024-01-14', category: 'Planning', status: 'Completed', progress: 100 },
+      { id: 3, name: 'UI/UX Design Phase', start: '2024-01-15', end: '2024-01-28', category: 'Design', status: 'In Progress', progress: 60 },
+      { id: 4, name: 'Frontend Architecture', start: '2024-01-20', end: '2024-02-05', category: 'Development', status: 'In Progress', progress: 40 },
+      { id: 5, name: 'Backend API Setup', start: '2024-01-25', end: '2024-02-10', category: 'Development', status: 'Pending', progress: 0 },
+      { id: 6, name: 'Database Schema', start: '2024-01-22', end: '2024-01-30', category: 'Development', status: 'Completed', progress: 100 },
+      { id: 7, name: 'Integration Testing', start: '2024-02-11', end: '2024-02-20', category: 'Testing', status: 'Pending', progress: 0 },
+      { id: 8, name: 'Final Review', start: '2024-02-21', end: '2024-02-25', category: 'Deployment', status: 'Pending', progress: 0 },
+    ];
+
+    const CATEGORIES = ['Planning', 'Design', 'Development', 'Testing', 'Deployment', 'Marketing'];
+    const STATUSES = ['Pending', 'In Progress', 'Completed', 'Delayed'];
+
+    const STATUS_COLORS = {
+      'Pending': 'bg-gray-300 text-gray-700 border-gray-400',
+      'In Progress': 'bg-blue-500 text-white border-blue-600',
+      'Completed': 'bg-emerald-500 text-white border-emerald-600',
+      'Delayed': 'bg-red-500 text-white border-red-600',
+    };
+
+    const STATUS_BG_LIGHT = {
+      'Pending': 'bg-gray-100',
+      'In Progress': 'bg-blue-100',
+      'Completed': 'bg-emerald-100',
+      'Delayed': 'bg-red-100',
+    };
+
+    function GanttChart() {
+      const [tasks, setTasks] = useState(INITIAL_TASKS);
+      const [viewMode, setViewMode] = useState('Day');
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [editingTask, setEditingTask] = useState(null);
+      const timelineRef = useRef(null);
+
+      const dates = useMemo(() => {
+        if (tasks.length === 0) return [];
+
+        const startDates = tasks.map(t => new Date(t.start).getTime());
+        const endDates = tasks.map(t => new Date(t.end).getTime());
+        let minDate = new Date(Math.min(...startDates));
+        let maxDate = new Date(Math.max(...endDates));
+
+        minDate.setDate(minDate.getDate() - 5);
+        maxDate.setDate(maxDate.getDate() + 15);
+
+        const dateArray = [];
+        const current = new Date(minDate);
+        while (current <= maxDate) {
+          dateArray.push(formatDate(current));
+          current.setDate(current.getDate() + 1);
+        }
+        return dateArray;
+      }, [tasks]);
+
+      const columnWidth = viewMode === 'Day' ? 50 : 30;
+
+      const handleDelete = (id) => {
+        if (confirm('Are you sure you want to delete this task?')) {
+          setTasks(tasks.filter(t => t.id !== id));
+        }
+      };
+
+      const handleSaveTask = (taskData) => {
+        if (editingTask) {
+          setTasks(tasks.map(t => t.id === editingTask.id ? { ...taskData, id: t.id } : t));
+        } else {
+          setTasks([...tasks, { ...taskData, id: Date.now() }]);
+        }
+        setIsModalOpen(false);
+        setEditingTask(null);
+      };
+
+      const openNewTaskModal = () => {
+        setEditingTask(null);
+        setIsModalOpen(true);
+      };
+
+      const openEditTaskModal = (task) => {
+        setEditingTask(task);
+        setIsModalOpen(true);
+      };
+
+      const groupedTasks = useMemo(() => {
+        const groups = {};
+        CATEGORIES.forEach(cat => groups[cat] = []);
+        tasks.forEach(task => {
+          if (!groups[task.category]) groups[task.category] = [];
+          groups[task.category].push(task);
+        });
+        return groups;
+      }, [tasks]);
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 p-4 md:p-6 lg:p-8">
+          {/* Header */}
+          <div className="bg-white rounded-xl shadow-lg p-4 md:p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                <CalendarIcon />
+              </div>
+              <h1 className="text-xl md:text-2xl font-bold text-gray-800">Project Master Schedule</h1>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('Day')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    viewMode === 'Day' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Days
+                </button>
+                <button
+                  onClick={() => setViewMode('Week')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    viewMode === 'Week' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Weeks
+                </button>
+              </div>
+
+              <button
+                onClick={openNewTaskModal}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
+              >
+                <PlusIcon />
+                Add Task
+              </button>
+            </div>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden flex" style={{maxHeight: 'calc(100vh - 180px)'}}>
+            {/* Sidebar */}
+            <div className="w-64 md:w-72 lg:w-80 flex-shrink-0 border-r border-gray-200 bg-gray-50">
+              <div className="h-16 px-4 flex items-center border-b border-gray-200 bg-white sticky top-0 z-10">
+                <span className="font-semibold text-gray-700">Task Name</span>
+              </div>
+              <div className="overflow-y-auto" style={{maxHeight: 'calc(100vh - 260px)'}}>
+                {Object.entries(groupedTasks).map(([category, categoryTasks]) => (
+                  categoryTasks.length > 0 && (
+                    <div key={category}>
+                      <div className="px-4 py-2 bg-gray-100 font-semibold text-xs uppercase text-gray-500 tracking-wider sticky top-0 z-5">
+                        {category}
+                      </div>
+                      {categoryTasks.map(task => (
+                        <div
+                          key={task.id}
+                          className={`h-12 px-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-100 transition-colors cursor-pointer group ${STATUS_BG_LIGHT[task.status]}`}
+                        >
+                          <span className="text-sm text-gray-800 truncate flex-1 pr-2">{task.name}</span>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => openEditTaskModal(task)}
+                              className="p-1 hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 rounded"
+                            >
+                              <Edit2Icon />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(task.id)}
+                              className="p-1 hover:bg-red-100 text-gray-400 hover:text-red-600 rounded"
+                            >
+                              <Trash2Icon />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ))}
+              </div>
+            </div>
+
+            {/* Timeline Area */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {/* Timeline Header */}
+              <div
+                className="h-16 border-b border-gray-200 overflow-x-auto scrollbar-thin"
+                onScroll={(e) => { if (timelineRef.current) timelineRef.current.scrollLeft = e.target.scrollLeft }}
+              >
+                <div className="flex h-full" style={{ width: dates.length * columnWidth }}>
+                  {dates.map((date, index) => {
+                    const d = new Date(date);
+                    const isMonthStart = d.getDate() === 1 || index === 0;
+                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+                    return (
+                      <div
+                        key={date}
+                        className={`flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-100 text-xs ${
+                          isWeekend ? 'bg-gray-50' : 'bg-white'
+                        }`}
+                        style={{ width: columnWidth }}
+                      >
+                        {isMonthStart && (
+                          <span className="text-indigo-600 font-semibold text-[10px] absolute top-1">{getMonthName(date)}</span>
+                        )}
+                        <span className={`font-bold ${isWeekend ? 'text-gray-400' : 'text-gray-700'}`}>{d.getDate()}</span>
+                        <span className={`text-[10px] ${isWeekend ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {d.toLocaleDateString('en-US', { weekday: 'narrow' })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Timeline Body */}
+              <div
+                ref={timelineRef}
+                className="flex-1 overflow-auto scrollbar-thin"
+                onScroll={(e) => {
+                  const header = e.target.previousSibling;
+                  if(header) header.scrollLeft = e.target.scrollLeft;
+                }}
+              >
+                <div className="relative" style={{ width: dates.length * columnWidth, minHeight: '100%' }}>
+                  {/* Grid Lines */}
+                  <div className="absolute inset-0 flex pointer-events-none">
+                    {dates.map((date) => {
+                      const d = new Date(date);
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                      return (
+                        <div
+                          key={date}
+                          className={`flex-shrink-0 h-full border-r ${isWeekend ? 'bg-gray-50/50 border-gray-200' : 'border-gray-100'}`}
+                          style={{ width: columnWidth }}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  {/* Task Rows */}
+                  <div className="relative">
+                    {Object.entries(groupedTasks).map(([category, categoryTasks]) => (
+                      categoryTasks.length > 0 && (
+                        <div key={category}>
+                          <div className="h-7"></div>
+                          {categoryTasks.map(task => {
+                            const startDateIndex = dates.indexOf(task.start);
+                            const duration = getDaysDiff(task.start, task.end) + 1;
+
+                            if (startDateIndex === -1 && dates.indexOf(task.end) === -1) return <div key={task.id} className="h-12"></div>;
+
+                            let left = startDateIndex * columnWidth;
+                            let width = duration * columnWidth;
+
+                            if (startDateIndex === -1) {
+                              const daysBefore = getDaysDiff(task.start, dates[0]);
+                              width -= daysBefore * columnWidth;
+                              left = 0;
+                            }
+
+                            return (
+                              <div key={task.id} className="h-12 relative flex items-center px-1">
+                                <div
+                                  className={`absolute h-8 rounded-md shadow-sm border cursor-pointer transition-all hover:shadow-md hover:scale-[1.02] ${STATUS_COLORS[task.status]}`}
+                                  style={{
+                                    left: left + 4,
+                                    width: Math.max(width - 8, 20),
+                                  }}
+                                  onClick={() => openEditTaskModal(task)}
+                                >
+                                  <div className="px-2 py-1 text-xs font-medium truncate h-full flex items-center">
+                                    {task.name}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal */}
+          {isModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <h2 className="text-lg font-bold text-gray-800">
+                    {editingTask ? 'Edit Task' : 'New Task'}
+                  </h2>
+                  <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <XIcon />
+                  </button>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.target);
+                    handleSaveTask({
+                      name: formData.get('name'),
+                      category: formData.get('category'),
+                      start: formData.get('start'),
+                      end: formData.get('end'),
+                      status: formData.get('status'),
+                      progress: Number(formData.get('progress'))
+                    });
+                  }}
+                >
+                  <div className="p-4 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Task Name</label>
+                      <input
+                        type="text"
+                        name="name"
+                        required
+                        defaultValue={editingTask?.name || ''}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="Enter task name"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                        <input
+                          type="date"
+                          name="start"
+                          required
+                          defaultValue={editingTask?.start || formatDate(new Date())}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                        <input
+                          type="date"
+                          name="end"
+                          required
+                          defaultValue={editingTask?.end || formatDate(new Date())}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                        <select
+                          name="category"
+                          defaultValue={editingTask?.category || CATEGORIES[0]}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <select
+                          name="status"
+                          defaultValue={editingTask?.status || STATUSES[0]}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Progress (%)</label>
+                      <input
+                        type="range"
+                        name="progress"
+                        min="0"
+                        max="100"
+                        defaultValue={editingTask?.progress || 0}
+                        className="w-full accent-indigo-600"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>0%</span>
+                        <span>50%</span>
+                        <span>100%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+                    >
+                      <SaveIcon />
+                      Save Task
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<GanttChart />);
+  </script>
+</body>
+</html>
